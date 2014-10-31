@@ -24,7 +24,7 @@ BUSINESS_CONTAINER_CLASS = "sbaMemberBorderShadow"
   BUSINESS_LINK_MENU_CLASS = "sbaLinkMenu"
     # This will contain the link to the website.
 
-COOKIES = "ASPSESSIONIDCCDQRAAA=IKGHABHADGLBJPGMMCLLHPAL; ASPSESSIONIDSSSATDCC=DAEBPGHBDKDBGOAAFHGCOACC; __utmt=1; __utma=133477404.948335745.1414623609.1414723460.1414780911.4; __utmb=133477404.1.10.1414780911; __utmc=133477404; __utmz=133477404.1414780911.4.4.utmcsr=google|utmccn=(organic)|utmcmd=organic|utmctr=(not%20provided); ASPSESSIONIDSQQCTCDC=IFOBGEMBNGACGNMKLCGDEKIB; sbaweb=cookies=true&wpid=%2D101&id=6093; ASPSESSIONIDCCDQRAAA=IKGHABHADGLBJPGMMCLLHPAL; ASPSESSIONIDSSSATDCC=DAEBPGHBDKDBGOAAFHGCOACC; ASPSESSIONIDSQQCTCDC=IFOBGEMBNGACGNMKLCGDEKIB; __utma=47718587.1665526488.1414623621.1414721677.1414780915.4; __utmb=47718587.2.10.1414780915; __utmc=47718587; __utmz=47718587.1414780915.4.3.utmcsr=columbiamochamber.com|utmccn=(referral)|utmcmd=referral|utmcct=/"
+COOKIES = "ASPSESSIONIDCCDQRAAA=IKGHABHADGLBJPGMMCLLHPAL; ASPSESSIONIDSSSATDCC=DAEBPGHBDKDBGOAAFHGCOACC; ASPSESSIONIDSQQCTCDC=IFOBGEMBNGACGNMKLCGDEKIB; __utmt=1; __utma=133477404.948335745.1414623609.1414780911.1414786801.5; __utmb=133477404.1.10.1414786801; __utmc=133477404; __utmz=133477404.1414786801.5.5.utmcsr=google|utmccn=(organic)|utmcmd=organic|utmctr=(not%20provided); sbaweb=cookies=true&id=6093&wpid=%2D101; ASPSESSIONIDCCDQRAAA=IKGHABHADGLBJPGMMCLLHPAL; ASPSESSIONIDSSSATDCC=DAEBPGHBDKDBGOAAFHGCOACC; ASPSESSIONIDSQQCTCDC=IFOBGEMBNGACGNMKLCGDEKIB; __utma=47718587.1665526488.1414623621.1414780915.1414786805.5; __utmb=47718587.2.10.1414786805; __utmc=47718587; __utmz=47718587.1414786805.5.4.utmcsr=columbiamochamber.com|utmccn=(referral)|utmcmd=referral|utmcct=/"
 
 POST_HEADERS = {
   "Accept" => "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
@@ -78,10 +78,10 @@ def main
     end
 
     puts "Total Businesses: #{businesses.count}"
-
+    break
   end
 
-  CSV.open(File.join(File.dirname(__FILE__), BUSINESS_CSV_FILENAME), "wb") do |csv|
+  CSV.open(File.join(File.dirname(__FILE__), BUSINESS_CSV_FILENAME), "wb", { force_quotes: true }) do |csv|
     csv << [
       "Name",
       "Main Contact",
@@ -134,7 +134,7 @@ def get_businesses_from_page(resp_body)
       bus_name = CGI.unescapeHTML(bus_container.css(".#{BUSINESS_NAME_CLASS}").first.xpath("text()").to_s)
       bus_main_contact = CGI.unescapeHTML(bus_container.css(".#{BUSINESS_MAIN_CONTACT_CLASS}").first.xpath("text()").to_s)
       bus_address = CGI.unescapeHTML(bus_container.css(".#{BUSINESS_ADDRESS_CLASS}").first.inner_html.gsub!("<br>", ", "))
-      bus_phone = CGI.unescapeHTML(bus_container.css(".#{BUSINESS_PHONE_CLASS}").first.xpath("text()").to_s)
+      bus_phone = CGI.unescapeHTML(bus_container.css(".#{BUSINESS_PHONE_CLASS}").first.xpath("text()").to_s.gsub("Phone: ", ""))
       bus_category = CGI.unescapeHTML(bus_container.css(".#{BUSINESS_CATEGORY_CLASS} a").first.xpath("text()").to_s)
 
       bus_has_website = false
