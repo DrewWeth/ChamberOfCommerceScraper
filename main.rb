@@ -1,18 +1,7 @@
-#
-# TODO
-# Add if it has website to hash
-# Cleanse address for concatted address and city
-# Unescape HTML escape sequences
-#
-#
-#
-#
-#
-#
-#
-require 'nokogiri'
-require 'uri'
 require 'net/http'
+require 'uri'
+require 'cgi'
+require 'nokogiri'
 
 # The search page is a post request with form data:
 #   intsearchby - This will be 4 for searching by business category.
@@ -34,6 +23,8 @@ BUSINESS_CONTAINER_CLASS = "sbaMemberBorderShadow"
   BUSINESS_LINK_MENU_CLASS = "sbaLinkMenu"
     # This will contain the link to the website.
 
+COOKIES = "ASPSESSIONIDCCDQRAAA=IKGHABHADGLBJPGMMCLLHPAL; ASPSESSIONIDSSSATDCC=DAEBPGHBDKDBGOAAFHGCOACC; __utmt=1; __utma=133477404.948335745.1414623609.1414723460.1414780911.4; __utmb=133477404.1.10.1414780911; __utmc=133477404; __utmz=133477404.1414780911.4.4.utmcsr=google|utmccn=(organic)|utmcmd=organic|utmctr=(not%20provided); ASPSESSIONIDSQQCTCDC=IFOBGEMBNGACGNMKLCGDEKIB; sbaweb=cookies=true&wpid=%2D101&id=6093; ASPSESSIONIDCCDQRAAA=IKGHABHADGLBJPGMMCLLHPAL; ASPSESSIONIDSSSATDCC=DAEBPGHBDKDBGOAAFHGCOACC; ASPSESSIONIDSQQCTCDC=IFOBGEMBNGACGNMKLCGDEKIB; __utma=47718587.1665526488.1414623621.1414721677.1414780915.4; __utmb=47718587.2.10.1414780915; __utmc=47718587; __utmz=47718587.1414780915.4.3.utmcsr=columbiamochamber.com|utmccn=(referral)|utmcmd=referral|utmcct=/"
+
 POST_HEADERS = {
   "Accept" => "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
   "Accept-Encoding" => "gzip,deflate",
@@ -42,7 +33,7 @@ POST_HEADERS = {
   "Connection" => "keep-alive",
   "Content-Length" => "41",
   "Content-Type" => "application/x-www-form-urlencoded",
-  "Cookie" => "ASPSESSIONIDCCDQRAAA=IKGHABHADGLBJPGMMCLLHPAL; ASPSESSIONIDSSSATDCC=DAEBPGHBDKDBGOAAFHGCOACC; __utmt=1; __utma=133477404.948335745.1414623609.1414626899.1414723460.3; __utmb=133477404.1.10.1414723460; __utmc=133477404; __utmz=133477404.1414723460.3.3.utmcsr=google|utmccn=(organic)|utmcmd=organic|utmctr=(not%20provided); sbaweb=cookies=true&id=6093&wpid=%2D101; ASPSESSIONIDCCDQRAAA=IKGHABHADGLBJPGMMCLLHPAL; ASPSESSIONIDSSSATDCC=DAEBPGHBDKDBGOAAFHGCOACC; __utma=47718587.1665526488.1414623621.1414626909.1414721677.3; __utmb=47718587.4.10.1414721677; __utmc=47718587; __utmz=47718587.1414626909.2.2.utmcsr=columbiamochamber.com|utmccn=(referral)|utmcmd=referral|utmcct=/",
+  "Cookie" => COOKIES,
   "Host" => "members.columbiamochamber.com",
   "Origin" => "http://members.columbiamochamber.com",
   "Referer" => "http://members.columbiamochamber.com/sbaweb/members/advancedsearch.asp",
@@ -55,7 +46,7 @@ GET_HEADERS = {
   "Accept-Language" => "en-US,en;q=0.8",
   "Cache-Control" => "max-age=0",
   "Connection" => "keep-alive",
-  "Cookie" => "ASPSESSIONIDCCDQRAAA=IKGHABHADGLBJPGMMCLLHPAL; ASPSESSIONIDSSSATDCC=DAEBPGHBDKDBGOAAFHGCOACC; __utma=133477404.948335745.1414623609.1414626899.1414723460.3; __utmc=133477404; __utmz=133477404.1414723460.3.3.utmcsr=google|utmccn=(organic)|utmcmd=organic|utmctr=(not%20provided); sbaweb=cookies=true&id=6093&wpid=%2D101; ASPSESSIONIDCCDQRAAA=IKGHABHADGLBJPGMMCLLHPAL; ASPSESSIONIDSSSATDCC=DAEBPGHBDKDBGOAAFHGCOACC; __utma=47718587.1665526488.1414623621.1414626909.1414721677.3; __utmc=47718587; __utmz=47718587.1414626909.2.2.utmcsr=columbiamochamber.com|utmccn=(referral)|utmcmd=referral|utmcct=/",
+  "Cookie" => COOKIES,
   "Host" => "members.columbiamochamber.com",
   "User-Agent" => "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/38.0.2125.104 Safari/537.36"
 }
@@ -90,15 +81,24 @@ def main
   end
 
   CSV.open(File.join(File.dirname(__FILE__), BUSINESS_CSV_FILENAME), "wb") do |csv|
+    csv << [
+      "Name",
+      "Main Contact",
+      "Address",
+      "Phone",
+      "Category",
+      "Has Website"
+    ]
+
     businesses.each do |business|
       csv << [
         business[:name],
         business[:contact],
         business[:address],
         business[:phone],
-        business[:category]
+        business[:category],
+        business[:has_website]
       ]
-      businesses << { name: bus_name, contact: bus_main_contact, address: bus_address, phone: bus_phone, category: bus_category }
     end
   end
 end
@@ -130,20 +130,29 @@ def get_businesses_from_page(resp_body)
   doc = Nokogiri::HTML(resp_body)
   doc.css(".#{BUSINESS_CONTAINER_CLASS}").each do |bus_container|
     begin
-      bus_name = bus_container.css(".#{BUSINESS_NAME_CLASS}").first.xpath("text()")
-      bus_main_contact = bus_container.css(".#{BUSINESS_MAIN_CONTACT_CLASS}").first.xpath("text()")
-      bus_address = bus_container.css(".#{BUSINESS_ADDRESS_CLASS}").first.xpath("text()")
-      bus_phone = bus_container.css(".#{BUSINESS_PHONE_CLASS}").first.xpath("text()")
-      bus_category = bus_container.css(".#{BUSINESS_CATEGORY_CLASS} a").first.xpath("text()")
+      bus_name = CGI.unescapeHTML(bus_container.css(".#{BUSINESS_NAME_CLASS}").first.xpath("text()").to_s)
+      bus_main_contact = CGI.unescapeHTML(bus_container.css(".#{BUSINESS_MAIN_CONTACT_CLASS}").first.xpath("text()").to_s)
+      bus_address = CGI.unescapeHTML(bus_container.css(".#{BUSINESS_ADDRESS_CLASS}").first.inner_html.gsub!("<br>", ", "))
+      bus_phone = CGI.unescapeHTML(bus_container.css(".#{BUSINESS_PHONE_CLASS}").first.xpath("text()").to_s)
+      bus_category = CGI.unescapeHTML(bus_container.css(".#{BUSINESS_CATEGORY_CLASS} a").first.xpath("text()").to_s)
+
+      bus_has_website = false
+      first_menu_link = bus_container.css(".#{BUSINESS_LINK_MENU_CLASS} a.body").first
+      if first_menu_link.xpath("text()").to_s == "Web Site"
+        bus_has_website = true
+      end
+
       #puts "Business Name: #{bus_name}"
       #puts "Business Main Contact: #{bus_main_contact}"
       #puts "Business Address: #{bus_address}"
       #puts "Business Phone: #{bus_phone}"
       #puts "Business Category: #{bus_category}"
+      #puts "Business Has Website: #{bus_has_website}"
       #puts
 
-      businesses << { name: bus_name, contact: bus_main_contact, address: bus_address, phone: bus_phone, category: bus_category }
-    rescue
+      businesses << { name: bus_name, contact: bus_main_contact, address: bus_address, phone: bus_phone, category: bus_category, has_website: bus_has_website }
+    rescue Exception => e
+      puts e
       puts "An error occured when parsing a business."
     end
   end
