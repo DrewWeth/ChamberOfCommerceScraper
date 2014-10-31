@@ -2,6 +2,7 @@ require 'net/http'
 require 'uri'
 require 'cgi'
 require 'nokogiri'
+require 'csv'
 
 # The search page is a post request with form data:
 #   intsearchby - This will be 4 for searching by business category.
