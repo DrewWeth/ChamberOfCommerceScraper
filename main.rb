@@ -3,6 +3,8 @@ require 'uri'
 require 'cgi'
 require 'nokogiri'
 require 'csv'
+require 'json'
+
 
 # The search page is a post request with form data:
 #   intsearchby - This will be 4 for searching by business category.
@@ -24,7 +26,9 @@ BUSINESS_CONTAINER_CLASS = "sbaMemberBorderShadow"
   BUSINESS_LINK_MENU_CLASS = "sbaLinkMenu"
     # This will contain the link to the website.
 
-COOKIES = "ASPSESSIONIDCCDQRAAA=IKGHABHADGLBJPGMMCLLHPAL; ASPSESSIONIDSSSATDCC=DAEBPGHBDKDBGOAAFHGCOACC; ASPSESSIONIDSQQCTCDC=IFOBGEMBNGACGNMKLCGDEKIB; __utmt=1; __utma=133477404.948335745.1414623609.1414780911.1414786801.5; __utmb=133477404.1.10.1414786801; __utmc=133477404; __utmz=133477404.1414786801.5.5.utmcsr=google|utmccn=(organic)|utmcmd=organic|utmctr=(not%20provided); sbaweb=cookies=true&id=6093&wpid=%2D101; ASPSESSIONIDCCDQRAAA=IKGHABHADGLBJPGMMCLLHPAL; ASPSESSIONIDSSSATDCC=DAEBPGHBDKDBGOAAFHGCOACC; ASPSESSIONIDSQQCTCDC=IFOBGEMBNGACGNMKLCGDEKIB; __utma=47718587.1665526488.1414623621.1414780915.1414786805.5; __utmb=47718587.2.10.1414786805; __utmc=47718587; __utmz=47718587.1414786805.5.4.utmcsr=columbiamochamber.com|utmccn=(referral)|utmcmd=referral|utmcct=/"
+
+# Must update cookies as a work around to Chamber of Commerce's attempts to prevent web scraping. Located under Network tab in Chrome.
+COOKIES = "ASPSESSIONIDQQSTSSDB=JPJLGBKBPEAACMHGHGALODDF; __utmt=1; sbaweb=wpid=%2D101&id=6093&hdr=&cookies=true; ASPSESSIONIDQQSTSSDB=JPJLGBKBPEAACMHGHGALODDF; __utma=47718587.1095979035.1424226626.1424226626.1424226626.1; __utmb=47718587.23.10.1424226626; __utmc=47718587; __utmz=47718587.1424226626.1.1.utmcsr=(direct)|utmccn=(direct)|utmcmd=(none)"
 
 POST_HEADERS = {
   "Accept" => "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
@@ -53,55 +57,62 @@ GET_HEADERS = {
 }
 
 def main
-  businesses = []
 
-  bus_codes = business_category_codes()
-  bus_codes.each_with_index do |bus_code, i|
-    resp = get_POST_reponse(COC_SEARCH_URL, {
-      intsearchby: 4,
-      BUSCODE: bus_code,
-      intSearchOpt: 2
-    })
+    businesses = []
 
-    puts "Business Code: #{bus_code} [#{i + 1} of #{bus_codes.count}]..."
+    bus_codes = business_category_codes()
+    bus_codes.each_with_index do |bus_code, i|
+      resp = get_POST_reponse(COC_SEARCH_URL, {
+        intsearchby: 4,
+        BUSCODE: bus_code,
+        intSearchOpt: 2
+      })
 
-    links = get_additional_links_on_page(resp)
+      puts "Business Code: #{bus_code} [#{i + 1} of #{bus_codes.count}]..."
 
-    businesses = businesses + get_businesses_from_page(resp)
+      links = get_additional_links_on_page(resp)
+        businesses = businesses + get_businesses_from_page(resp)
 
-    if links
-      links.each_with_index do |link, i|
-        puts "Page #{i + 2}..."
-        get_resp = get_GET_reponse(link)
-        businesses = businesses + get_businesses_from_page(get_resp)
+        if links
+          links.each_with_index do |link, i|
+            puts "Page #{i + 2}..."
+            get_resp = get_GET_reponse(link)
+            businesses = businesses + get_businesses_from_page(get_resp)
+          end
+        end
+      puts "Total Businesses: #{businesses.count}"
+
+
+      output = File.open( "outputfile.json","w" )
+      begin
+        output << businesses.to_json
+      rescue => e
+        puts e
+      ensure
+        output.close
       end
     end
-
-    puts "Total Businesses: #{businesses.count}"
-    break
-  end
-
-  CSV.open(File.join(File.dirname(__FILE__), BUSINESS_CSV_FILENAME), "wb", { force_quotes: true }) do |csv|
-    csv << [
-      "Name",
-      "Main Contact",
-      "Address",
-      "Phone",
-      "Category",
-      "Has Website"
-    ]
-
-    businesses.each do |business|
-      csv << [
-        business[:name],
-        business[:contact],
-        business[:address],
-        business[:phone],
-        business[:category],
-        business[:has_website]
-      ]
-    end
-  end
+  # CSV.open(File.join(File.dirname(__FILE__), BUSINESS_CSV_FILENAME), "wb", { force_quotes: true }) do |csv|
+  #   csv << [
+  #     "Name",
+  #     "Main Contact",
+  #     "Address",
+  #     "Phone",
+  #     "Category",
+  #     "Has Website"
+  #   ]
+  #
+  #   businesses.each do |business|
+  #     csv << [
+  #       business[:name],
+  #       business[:contact],
+  #       business[:address],
+  #       business[:phone],
+  #       business[:category],
+  #       business[:has_website]
+  #     ]
+  #   end
+  # end
 end
 
 def get_additional_links_on_page(resp_body)
@@ -130,12 +141,13 @@ def get_businesses_from_page(resp_body)
   businesses = []
   doc = Nokogiri::HTML(resp_body)
   doc.css(".#{BUSINESS_CONTAINER_CLASS}").each do |bus_container|
+
     begin
-      bus_name = CGI.unescapeHTML(bus_container.css(".#{BUSINESS_NAME_CLASS}").first.xpath("text()").to_s)
-      bus_main_contact = CGI.unescapeHTML(bus_container.css(".#{BUSINESS_MAIN_CONTACT_CLASS}").first.xpath("text()").to_s)
-      bus_address = CGI.unescapeHTML(bus_container.css(".#{BUSINESS_ADDRESS_CLASS}").first.inner_html.gsub!("<br>", ", "))
-      bus_phone = CGI.unescapeHTML(bus_container.css(".#{BUSINESS_PHONE_CLASS}").first.xpath("text()").to_s.gsub("Phone: ", ""))
-      bus_category = CGI.unescapeHTML(bus_container.css(".#{BUSINESS_CATEGORY_CLASS} a").first.xpath("text()").to_s)
+      bus_name = CGI.unescapeHTML(bus_container.css(".#{BUSINESS_NAME_CLASS}").first.xpath("text()").to_s.force_encoding("ISO-8859-1").encode("UTF-8"))
+      bus_main_contact = CGI.unescapeHTML(bus_container.css(".#{BUSINESS_MAIN_CONTACT_CLASS}").first.xpath("text()").to_s.force_encoding("ISO-8859-1").encode("UTF-8"))
+      bus_address = CGI.unescapeHTML(bus_container.css(".#{BUSINESS_ADDRESS_CLASS}").first.inner_html.force_encoding("ISO-8859-1").encode("UTF-8").gsub!("<br>", ", "))
+      bus_phone = CGI.unescapeHTML(bus_container.css(".#{BUSINESS_PHONE_CLASS}").first.xpath("text()").to_s.force_encoding("ISO-8859-1").encode("UTF-8").gsub("Phone: ", ""))
+      bus_category = CGI.unescapeHTML(bus_container.css(".#{BUSINESS_CATEGORY_CLASS} a").first.xpath("text()").to_s.force_encoding("ISO-8859-1").encode("UTF-8"))
 
       bus_has_website = false
       first_menu_link = bus_container.css(".#{BUSINESS_LINK_MENU_CLASS} a.body").first
@@ -152,7 +164,7 @@ def get_businesses_from_page(resp_body)
       #puts
 
       businesses << { name: bus_name, contact: bus_main_contact, address: bus_address, phone: bus_phone, category: bus_category, has_website: bus_has_website }
-    rescue Exception => e
+    rescue => e
       puts e
       puts "An error occured when parsing a business."
     end
@@ -165,42 +177,53 @@ def business_category_codes
 end
 
 def get_POST_reponse(url, form_data)
-  uri = URI.parse(url)
-  http = Net::HTTP.new(uri.host, uri.port)
+  begin
+    uri = URI.parse(url)
+    http = Net::HTTP.new(uri.host, uri.port)
 
-  req = Net::HTTP::Post.new(url, POST_HEADERS)
-  req.set_form_data(form_data)
+    req = Net::HTTP::Post.new(url, POST_HEADERS)
+    req.set_form_data(form_data)
 
-  res = nil
-  http.start do
-    res = http.request(req)
-  end
+    res = nil
+    http.start do
+      res = http.request(req)
+    end
 
-  if res.nil?
-    return nil
-  else
-    return res.body
+    if res.nil?
+      return nil
+    else
+
+      # puts res.body
+      return res.body
+    end
+  rescue => e
+    puts e
   end
 end
 
 def get_GET_reponse(url)
-  uri = URI.parse(url)
-  http = Net::HTTP.new(uri.host, uri.port)
+  begin
+    uri = URI.parse(url)
+    http = Net::HTTP.new(uri.host, uri.port)
 
-  req = Net::HTTP::Get.new(url, GET_HEADERS)
+    req = Net::HTTP::Get.new(url, GET_HEADERS)
 
-  res = nil
-  http.start do
-    res = http.request(req)
-  end
+    res = nil
+    http.start do
+      res = http.request(req)
+    end
 
-  if res.nil?
-    return nil
-  else
-    return res.body
+    if res.nil?
+      return nil
+    else
+      return res.body
+    end
+  rescue => e
+    puts e
   end
 end
 
 if __FILE__ == $0
+  puts "Yay"
   main()
 end
